@@ -1,0 +1,16 @@
+- 为了service worker 之后扩展更多功能，以及引入workbox不需引入cdn ,选择 InjectManifest 插件
+- 使用chrome提供的workbox插件
+- packages.json中安装插件依赖
+- 本次以6.6.0版本为例
+
+"dependencies": {
+  "workbox-core": "6.6.0",
+  "workbox-cacheable-response": "6.6.0",
+  "workbox-expiration": "6.6.0",
+  "workbox-precaching": "6.6.0",
+  "workbox-routing": "6.6.0",
+  "workbox-strategies": "6.6.0",
+},
+"devDependencies": {
+  "workbox-webpack-plugin": "6.6.0",
+}
