@@ -1,0 +1,134 @@
+(function () {
+  // 获取 sw 配置
+  function getSwConfig() {
+    return new Promise(function(resolve, reject) {
+      var SW_KEY = 'arena_platform_swconfig';
+      var PSM = 'webcast.operation.platform_va';
+      var xhr = new XMLHttpRequest();
+      var data = JSON.stringify({
+        Field: {
+          Key: SW_KEY,
+          Psm: PSM,
+        },
+      });
+      xhr.timeout = 10000; // 设置请求超时时间为5秒
+      xhr.ontimeout = function () {
+        console.error('拉取 sw 配置超时');
+        reject(new Error('拉取 sw 配置超时'));
+      };
+      xhr.open('post', '/api/arena/no_auth/tool/tcc/queryTccConfig');
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onload = function () {
+        try {
+          var data = JSON.parse(JSON.parse(this.responseText).data[PSM][SW_KEY]);
+          if (data) {
+            if (navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage) {
+              navigator.serviceWorker.controller.postMessage({
+                type: 'SW_TCC',
+                message: data,
+              });
+            }
+            resolve(data);
+          } else {
+            console.error('tcc 无数据');
+            reject(new Error('tcc 无数据'));
+          }
+        } catch (e) {
+          console.error('sw 配置格式解析错误', e, this.responseText);
+          reject(e);
+        }
+      };
+      xhr.send(data);
+    });
+  }
+
+  // 注册 sw
+  function registerSw() {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then(function (reg) {
+        console.log('arena app service worker registered', reg);
+      })
+      .catch(function (e) {
+        console.log('arena app service worker register error', e);
+      });
+  }
+
+  // 注销 sw
+  function unRegisterSw() {
+    // unregister caches
+    navigator.serviceWorker.getRegistrations().then(function (res) {
+      res.forEach(function(item) {
+        item
+          .unregister()
+          .then(function () {
+            console.log('arena app service worker unregisted. Refresh your page, it will take effect.');
+          });
+      });
+    });
+    // clean caches
+    window.caches &&
+      caches.keys &&
+      caches.keys().then(function (keys) {
+        keys.forEach(function (key) {
+          caches.delete(key);
+        });
+      });
+  }
+
+  // 基于本地缓存和tcc配置，注册/注销 sw
+  function registerOrUnregisterServiceWorker() {
+    // 本地缓存 tcc 开关值，第一次 clientSwOpenInCache 为 false
+    var clientSwOpenInCache = localStorage.getItem('clientSwOpen') === 'true';
+    var disableSW = false;
+    var searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.has('disable-sw')) {
+      disableSW = true;
+    }
+
+    if (disableSW) {
+      unRegisterSw();
+      getSwConfig().then(function (res) {
+        var clientSwOpen = res.clientSwOpen;
+        localStorage.setItem('clientSwOpen', String(Boolean(clientSwOpen)));
+      }).catch(function (e) {});
+    } else {
+      window.addEventListener('load', function () {
+        if (clientSwOpenInCache) {
+          setTimeout(function () {
+            registerSw();
+          }, 5000);
+        }
+        getSwConfig().then(function (res) {
+          var clientSwOpen = res.clientSwOpen;
+          console.log('tcc clientSwOpen: ', clientSwOpen);
+          // 本地缓存为关闭，tcc为开启
+          if (!clientSwOpenInCache && clientSwOpen) {
+            registerSw();
+            // 本地缓存为开启，tcc为关闭
+          } else if (clientSwOpenInCache && !clientSwOpen) {
+            unRegisterSw();
+          }
+          localStorage.setItem('clientSwOpen', String(Boolean(clientSwOpen)));
+        }).catch(function (e) {});
+      });
+    }
+  }
+
+  // 页面加载成功通信到 sw
+  function postMessageToSwWhenPageLoad () {
+    window.addEventListener('load', () => {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'PAGE_LOAD',
+        });
+      }
+    });
+  }
+
+  // sw init 初始化
+  if ('serviceWorker' in navigator && location.host.includes('arena')) {
+    registerOrUnregisterServiceWorker();
+    postMessageToSwWhenPageLoad();
+  }
+})();
