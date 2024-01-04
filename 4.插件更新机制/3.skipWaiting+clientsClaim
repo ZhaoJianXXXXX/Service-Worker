@@ -1,0 +1,10 @@
+背景：
+  - 如果使用了 skipWaiting 的方式跳过 waiting 状态，直接激活了 Service Worker
+  - 可能会出现其他终端还没有受当前终端激活的 Service Worker 控制的情况，
+  - 切回其他终端之后，Service Worker 控制页面的效果可能不符合预期
+  - 尤其是如果 Service Worker 需要动态拦截第三方请求的时候
+
+预期：
+  - 为了保证 Service Worker 激活之后能够马上作用于所有的终端
+  - 通常在激活 Service Worker 后，通过在其中调用 self.clients.claim() 方法控制未受控制的客户端
+  - self.clients.claim() 方法返回一个 Promise，可以直接在 waitUntil() 方法中调用
